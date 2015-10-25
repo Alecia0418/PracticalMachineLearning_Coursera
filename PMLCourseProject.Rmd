@@ -1,0 +1,108 @@
+---
+output: html_document
+---
+Practical Machine Learning Course Project
+========================================================
+Author: Alecia Alianell
+
+### Summary of Project
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The data for the project is available here:
+[Training](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) 
+[Test](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+### Global Options
+We will be using several libraries throughout the project, so they will be loaded here.
+```{r,warning=FALSE}
+require(caret)
+require(rpart)
+require(rpart.plot)
+require(rattle)
+require(randomForest)
+```
+#### Set Seed
+Here we will set a seed so that the results are reproducible
+```{r}
+set.seed(1234)
+```
+#### Load Data and Partition into Datasets
+We need to load the test and training datasets.  Also, based on the notes in class, 60% of the data is considered for the training dataset and remaining 40% is considered for the test dataset, whcih can be done using the classe variable.  We will also deal with the NA results in the datasets.
+```{r,message=FALSE}
+# Load data from the web and create train and test datasets
+traincsv <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testcsv <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+train <- read.csv(url(traincsv), na.strings=c("NA","#DIV/0!",""))
+test <- read.csv(url(testcsv), na.strings=c("NA","#DIV/0!",""))
+inTrain <- createDataPartition(y=train$classe, p=0.6, list=FALSE)
+train.set <- train[inTrain, ]; test.set <- train[-inTrain, ]
+# Check dimensions for number of variables and number of observations
+dim(train.set)
+dim(test.set)
+```
+### Preliminary Cleaning
+Here we will delete any irrelevant information before performing any analyses.
+```{r}
+# Delete columns with all missing values
+train.set<-train.set[,colSums(is.na(train.set)) == 0]
+test.set <-test.set[,colSums(is.na(test.set)) == 0]
+
+# Some variables are irrelevant to our current project and can be deleted:
+train.set<-train.set[,-c(1:7)]
+test.set <-test.set[,-c(1:7)]
+
+# Check dimensions for number of variables and number of observations
+dim(train.set)
+dim(test.set)
+```
+You can see that we have reduced the number of variables considerably in our cleanup.
+
+### Decision Trees
+We will be using the variable classe to see the frequency of each levels in the train.set.
+```{r}
+plot(train.set$classe, col="red", main="Classe in Train.set", xlab="Classe", ylab="Frequency")
+```
+Level A seems to be the most frequent and D the least. Our prediction models should support this.
+
+#### Prediction Model 1 - Decision Tree
+```{r}
+# Prediction Model:
+model1 <- rpart(classe ~ ., data=train.set, method="class")
+# Plot of Decision Tree
+fancyRpartPlot(model1)
+# Test results on our test.set data:
+modelpred1 <- predict(model1, test.set, type = "class")
+confusionMatrix(modelpred1, test.set$classe)
+```
+#### Prediction Model 2 - Random Forest
+```{r}
+model2 <- randomForest(classe ~. , data=train.set, method="class")
+# Prediction Model:
+modelpred2 <- predict(model2, test.set, type = "class")
+# Test results on our test.set data:
+confusionMatrix(modelpred2, test.set$classe)
+```
+
+### Decision
+As seen above, the Random Forest method outperformed the Decision Tree method.  The accuracy for random forests was 0.9925  (95% CI (0.9903, 0.9943)) whereas the decision tree was 0.6953 (95% CI (0.6849, 0.7054)). Since our accuracy is above 99% for the random forest model in our cross-validation data, we should see very few misclassifications as compared to the decision tree model, which will only be 69.5% accurate. **Thus, the random forest model is the model to choose.**
+
+
+## Create Submission Data for Grading
+Since we know we are going to use random forests based on our decision above, we will apply the model to the test dataset:
+```{r}
+submission <- predict(model2, test, type="class")
+submission
+```
+We will then use the following code to write our submission files:
+```{r,eval=FALSE}
+# Write files for submission
+write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+write_files(submission)
+```
